@@ -44,6 +44,7 @@ npm run verify       # unit tests -> production build -> real-browser render ass
 npm run render:check # standalone GPU smoke test: screenshots + metrics into .artifacts/
 npm run probe:webgl  # print the GL renderer/capabilities a headless browser exposes
 npm run deploy       # create/publish the GitHub repo and deploy to Pages (needs `gh auth login`)
+npm run check:live   # load the deployed URL in headless Chrome and assert it renders at 60 fps
 ```
 
 ---
@@ -269,7 +270,9 @@ the production bundle renders at 60 fps from a `/event-horizon/` sub-path with z
 
 `npm run deploy` (`scripts/deploy-gh.sh`) does the whole publishing flow with `gh`: creates the public
 repo if missing, pushes `main`, runs `npm run build`, force-publishes `dist/` (+ `.nojekyll`) to the
-`gh-pages` branch, points Pages at that branch and polls until the site actually serves the page. It
+`gh-pages` branch, points Pages at that branch and polls until the site actually serves the page.
+`npm run check:live` then loads the deployed URL in headless Chrome and asserts on real pixels — same
+bar as the local tests (currently: 60 fps at ULTRA, black shadow, no console or asset errors). It
 needs only the `repo` OAuth scope — no Actions, no secrets, idempotent. `GH_OWNER` / `REPO_NAME`
 override where it goes.
 
