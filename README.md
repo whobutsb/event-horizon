@@ -263,14 +263,18 @@ tests/*.test.js            vitest suites (physics, presets, camera+quality, brow
 
 ## Sharing it (GitHub Pages)
 
-`.github/workflows/pages.yml` builds on every push to `main` and publishes `dist/` to Pages, so the
-app is reachable at `https://<user>.github.io/<repo>/`. The build uses relative asset URLs
-(`base: './'`), which is what makes the sub-path work — no configuration needed for a fork (verified:
+The app is reachable at `https://<user>.github.io/<repo>/`. The build uses relative asset URLs
+(`base: './'`), which is what makes that sub-path work — no configuration needed for a fork (verified:
 the production bundle renders at 60 fps from a `/event-horizon/` sub-path with zero console errors).
 
-`npm run deploy` (i.e. `scripts/deploy-gh.sh`) does the whole publishing flow with `gh`: creates the
-public repo if missing, pushes, switches Pages to "GitHub Actions" builds, waits for the run and polls
-until the site answers. Set `GH_OWNER` / `REPO_NAME` to publish somewhere else.
+`npm run deploy` (`scripts/deploy-gh.sh`) does the whole publishing flow with `gh`: creates the public
+repo if missing, pushes `main`, runs `npm run build`, force-publishes `dist/` (+ `.nojekyll`) to the
+`gh-pages` branch, points Pages at that branch and polls until the site actually serves the page. It
+needs only the `repo` OAuth scope — no Actions, no secrets, idempotent. `GH_OWNER` / `REPO_NAME`
+override where it goes.
+
+Prefer CI deploys? Copy `docs/github-pages-workflow.yml` to `.github/workflows/pages.yml` and flip
+Pages to "GitHub Actions" — pushing a workflow path just requires a token with the `workflow` scope.
 
 ## Tests
 
