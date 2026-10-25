@@ -97,6 +97,31 @@ suite('renders in a real browser', () => {
       expect(r.probeFall.g).toBeLessThan(r.probeAfter.g);
       expect(r.probeFall.stretch).toBeGreaterThan(r.probeAfter.stretch);
 
+      // --- dropping a probe must be *visible* (frame differencing: the same
+      // moment with the probe hidden vs drawn) -----------------------------
+      expect(r.probeVis.alpha).toBeGreaterThan(0.2);
+      for (const where of ['dark', 'busy']) {
+        const v = r.probeVis[where];
+        expect(v.maxDelta, `probe contrast over ${where} background`).toBeGreaterThan(0.25);
+        expect(v.changedPx, `probe pixel footprint over ${where} background`).toBeGreaterThan(150);
+        expect(v.peakWithProbe).toBeGreaterThan(0.4);
+      }
+      // the button stays actionable: a second drop restarts the fall
+      expect(r.probeVis.redropped).toBe(true);
+      expect(r.probeVis.rAfterRedrop).toBeGreaterThan(r.probeVis.rBeforeRedrop);
+      expect(r.probeVis.r).toBeLessThan(r.probeVis.rAfterRedrop + 0.01);
+
+      // --- cinematic mode must be escapable ------------------------------
+      expect(r.cineExit.ok).toBe(true);
+      expect(r.cineExit.entered).toBe(true);
+      expect(r.cineExit.pill.visible).toBe(true);
+      expect(r.cineExit.pill.clickable).toBe(true); // hit-testable while chrome fades
+      expect(r.cineExit.pill.onScreen).toBe(true);
+      expect(r.cineExit.clickedExits).toBe(true);
+      expect(r.cineExit.keyEntered).toBe(true); // a focused slider must not eat 'C'
+      expect(r.cineExit.focusStillTrapped).toBe(true); // ...even while it holds focus
+      expect(r.cineExit.escExits).toBe(true);
+
       // --- cinematic mode takes the controls, then gives them back -------
       expect(r.cine.ok).toBe(true);
       expect(r.cine.on.cinematic).toBe(true);

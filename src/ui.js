@@ -221,6 +221,18 @@ export class UI {
     this.cineBar = bar;
     root.append(bar);
 
+    // ---- cinematic exit --------------------------------------------------
+    // The control panel fades out for recording (opacity 0 + pointer-events
+    // none), so the button inside it cannot be clicked. This pill lives outside
+    // the panel, stays visible and clickable, and says how to get out.
+    const exit = el('button', 'cine-exit');
+    exit.append(el('span', 'dot'), el('span', null, 'recording — click or press C / Esc to exit'));
+    exit.type = 'button';
+    exit.title = 'leave cinematic mode (C or Esc)';
+    exit.addEventListener('click', () => this.onAction('cinematic'));
+    this.cineExit = exit;
+    root.append(exit);
+
     this.markPreset('gargantua');
   }
 
@@ -311,8 +323,14 @@ export class UI {
     this.dilValue.textContent = d.dilation.toFixed(5);
     this.clockBox.classList.toggle('slow', d.dilation < 0.6);
     if (this.probeBtn) {
+      // always actionable: clicking again releases a fresh probe. The status of
+      // the running one lives in the telemetry panel, not in this label — an
+      // informative-looking label that does nothing reads as a broken feature.
       this.probeBtn.classList.toggle('armed', !d.probe.active);
-      this.probeBtn.textContent = d.probe.active ? (d.probe.frozen ? 'FROZEN AT HORIZON' : 'PROBE FALLING') : 'DROP PROBE';
+      this.probeBtn.textContent = d.probe.active ? 'DROP PROBE AGAIN' : 'DROP PROBE';
+      this.probeBtn.title = d.probe.active
+        ? `current probe: ${d.probe.r.toFixed(3)} r_s · g ${d.probe.g.toFixed(3)}${d.probe.frozen ? ' · frozen at horizon' : ''} — click to release another (P)`
+        : 'release a probe from the ship (P)';
     }
   }
 
@@ -335,6 +353,7 @@ export class UI {
   setCinematic(on) {
     this.cinematic = on;
     this.root.classList.toggle('cinematic', on);
+    if (this.cineExit) this.cineExit.setAttribute('aria-hidden', on ? 'false' : 'true');
     this.panelEl.classList.toggle('hidden', on);
     this.cineBtn.classList.toggle('active', on);
     this.cineBtn.textContent = on ? 'EXIT CINEMATIC' : 'CINEMATIC MODE';

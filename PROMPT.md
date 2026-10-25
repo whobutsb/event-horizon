@@ -11,10 +11,10 @@ original instruction is reproduced verbatim below.
 | Provider | Unsloth Studio (`unsloth` provider), local inference — no cloud API |
 | Reasoning effort | **high** |
 | Harness | [`pi`](https://github.com/badlogic/pi-mono) coding agent |
-| Session | `01a174fb-060f-75af-8cd7-3a78a17efa6f`, 2026‑10‑25 21:32 → 22:51 UTC |
-| Wall-clock build time | **≈ 1 h 18 m** total agent time (see breakdown below) |
-| Tool calls | ≈160 (`bash` ~90 · `edit` 30 · `write` 24 · `read` ~17) |
-| Human turns | 4 — the brief, plus "stop", "continue" and this README request |
+| Session | `01a174fb-060f-75af-8cd7-3a78a17efa6f`, 2026‑10‑25 21:32 → 23:30 UTC |
+| Wall-clock build time | **≈ 1 h 47 m** of agent time end-to-end; **≈ 54 min** from the brief to a tested, built, browser-verified simulator (breakdown below) |
+| Tool calls | 213 (`bash` 136 · `edit` 30 · `write` 29 · `read` 18) |
+| Human turns | 11 — the brief, "stop"/"continue", docs request, publish request, two auth prompts, a question, and **two bug reports from using it** |
 | Hardware | Apple silicon (M-series Ultra), Metal via ANGLE for the headless GPU checks |
 
 ### Where the time went
@@ -22,7 +22,9 @@ original instruction is reproduced verbatim below.
 | Phase | Elapsed | Tool calls | What happened |
 | --- | --- | --- | --- |
 | 1. Prompt → working app | ~54 min | 97 | Scaffold Vite + Three.js, physics module, presets, camera rig, probe ODE, geodesic raymarcher, post chain, HUD/panel, unit tests to green, production build, headless-Chrome render verification with screenshots, exposure/bloom tuning |
-| 2. Post-compaction hardening | ~24 min | 62 | Validated the shader's discrete integrator against the analytic escape cone in an independent JS replica, diagnosed the "black frame near the horizon" as correct physics and fixed it as UX (auto lens widening + pan), added quality/camera and browser render test suites, fixed 3 real bugs those tests surfaced, README, tooling |
+| 2. Post-compaction hardening | ~22 min | — | Validated the shader's discrete integrator against the analytic escape cone in an independent JS replica, diagnosed the "black frame near the horizon" as correct physics and fixed it as UX (auto lens widening + pan), added quality/camera and browser render test suites, fixed 3 real bugs those tests surfaced, README, tooling |
+| 3. Publishing | ~13 min | — | gh auth device flow, repo creation, `workflow`-scope rejection worked around with a `gh-pages` publish path, live URL verified in headless Chrome |
+| 4. Fixes found by *using* it | ~18 min | — | Two reports from the author: the probe was invisible on release, and cinematic mode looked unexitable. Both were real bugs with non-obvious causes; both now have framebuffer-level assertions |
 
 Roughly a third of the wall clock is machine time rather than model time: booting headless WebGL2
 contexts and reading 1440×900 float framebuffers back for every render assertion.
@@ -98,3 +100,12 @@ what was built
   ~2.7 r_s, and the probe never visibly crossing the horizon. Both are explained in the README.
 * The agent wrote its own numerical validation harness on the fly (a JS replica of the shader's
   velocity-Verlet loop) rather than trusting that the render "looked right".
+* Phase 4 is the interesting one: 114 unit tests and a GPU pixel test all passed while two user-visible
+  features were broken. The probe was released *beside* the camera (near-zero depth, so outside the
+  field of view) and drawn by sampling an emissive ball at geodesic step centres ~0.6 r_s apart — it lit
+  only by luck; cinematic mode hid its own exit button with `pointer-events: none` while the keyboard
+  shortcut was swallowed by any slider still holding focus. Fixes: release the probe in front of the
+  ship and integrate it by closest-approach per ray segment; keep an always-clickable REC pill and stop
+  focused controls eating shortcuts. The regression tests now difference two frames that differ only in
+  whether the probe is drawn (projection alone would have missed it — its image is lensed away from the
+  straight-line direction), and hit-test the exit pill with `document.elementFromPoint`.

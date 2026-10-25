@@ -402,6 +402,149 @@ export async function runRenderCheck({ dev = false, verbose = true, shots = true
   const probeFall = await page.evaluate(() => window.EH.probe.readout());
   if (shots) await page.screenshot({ path: resolve(ARTIFACTS, '10-probe-fall.png') });
 
+  // --- dropping a probe must visibly change the frame --------------------
+  // Its apparent position is *not* the straight-line direction to it (light
+  // bends), so instead of projecting it we difference two frames that differ
+  // only in whether the probe is drawn: same moment, same camera, same sky.
+  const probeVis = await page.evaluate(async () => {
+    const { sim, rig, params, probe } = window.EH;
+    Object.assign(params, {
+      showDisk: false, photonRing: 0, alignStar: 0, starDensity: 0.6,
+      grain: 0, bloom: 0.5, exposure: 1, timeScale: 1, showProbe: true,
+    });
+    sim.setParams(params);
+    rig.goTo({ radius: 9, phi: 1.42, fov: 52 });
+    await new Promise((r) => setTimeout(r, 1500));
+    const btn = [...document.querySelectorAll('button')].find((b) => /DROP PROBE/i.test(b.textContent));
+    if (btn) btn.click();
+    await new Promise((r) => setTimeout(r, 900)); // released, still near the ship
+
+    const gl = sim.renderer.getContext();
+    const w = sim.width;
+    const h = sim.height;
+    const buf = new Uint8Array(w * h * 4);
+    const luma = () => {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, buf);
+      const out = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        out[i] = (0.2126 * buf[i * 4] + 0.7152 * buf[i * 4 + 1] + 0.0722 * buf[i * 4 + 2]) / 255;
+      }
+      return out;
+    };
+
+    const compare = async () => {
+      params.showProbe = false;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const off = luma();
+      params.showProbe = true;
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      const on = luma();
+      let maxDelta = 0;
+      let changed = 0;
+      let sx = 0;
+      let sy = 0;
+      let peak = 0;
+      let x0 = 1e9;
+      let x1 = -1e9;
+      let y0 = 1e9;
+      let y1 = -1e9;
+      for (let i = 0; i < w * h; i++) {
+        const d = on[i] - off[i];
+        if (d > maxDelta) maxDelta = d;
+        if (d > 0.08) {
+          changed++;
+          const x = i % w;
+          const y = (i / w) | 0;
+          sx += x;
+          sy += y;
+          if (on[i] > peak) peak = on[i];
+          if (x < x0) x0 = x;
+          if (x > x1) x1 = x;
+          if (y < y0) y0 = y;
+          if (y > y1) y1 = y;
+        }
+      }
+      return {
+        maxDelta: +maxDelta.toFixed(3),
+        changedPx: changed,
+        peakWithProbe: +peak.toFixed(3),
+        centroid: changed ? { x: Math.round(sx / changed / w * 100) / 100, y: Math.round(sy / changed / h * 100) / 100 } : null,
+        bboxPx: changed ? [x0, y0, x1 - x0, y1 - y0] : null,
+      };
+    };
+
+    // the button must stay actionable while a probe is already falling
+    const rBeforeRedrop = +probe.state.r.toFixed(2);
+    const redropped = (() => {
+      const b = [...document.querySelectorAll('button')].find((x) => /DROP PROBE/i.test(x.textContent));
+      if (!b) return false;
+      b.click();
+      return true;
+    })();
+    await new Promise((r) => setTimeout(r, 400));
+    const rAfterRedrop = +probe.state.r.toFixed(2);
+
+    const dark = await compare(); // sky only: unambiguous proof of light
+    Object.assign(params, { showDisk: true, photonRing: 1 }); // against a busy disk
+    sim.setParams(params);
+    await new Promise((r) => setTimeout(r, 600));
+    const busy = await compare();
+    return {
+      dark,
+      busy,
+      redropped,
+      rBeforeRedrop,
+      rAfterRedrop,
+      alpha: +probe.alpha.toFixed(2),
+      size: probe.size,
+      r: +probe.state.r.toFixed(2),
+    };
+  });
+  if (shots) await page.screenshot({ path: resolve(ARTIFACTS, '11-probe-visible.png') });
+
+  // --- cinematic mode must be escapable ----------------------------------
+  const cineExit = await page.evaluate(async () => {
+    const out = {};
+    const enter = [...document.querySelectorAll('button')].find((b) => /CINEMATIC MODE/i.test(b.textContent));
+    if (!enter) return { ok: false, why: 'no cinematic button' };
+    // 1) focus a slider first: a focused control must not swallow the shortcut
+    const slider = document.querySelector('.panel input[type=range]');
+    if (slider) slider.focus();
+    enter.click();
+    await new Promise((r) => setTimeout(r, 900));
+    out.entered = window.EH.rig.cinematic === true;
+
+    // 2) the pill must be visible *and* hit-testable at its own centre
+    const pill = document.querySelector('.cine-exit');
+    if (!pill) return { ok: false, why: 'no exit pill', ...out };
+    const rect = pill.getBoundingClientRect();
+    const cs = getComputedStyle(pill);
+    const hit = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+    out.pill = {
+      visible: cs.display !== 'none' && Number(cs.opacity) > 0.5,
+      clickable: cs.pointerEvents === 'auto' && !!hit && (hit === pill || pill.contains(hit)),
+      label: pill.textContent.trim(),
+      onScreen: rect.width > 40 && rect.top >= 0 && rect.bottom < window.innerHeight,
+    };
+
+    // 3) clicking it exits
+    pill.click();
+    await new Promise((r) => setTimeout(r, 500));
+    out.clickedExits = window.EH.rig.cinematic === false;
+
+    // 4) the keyboard works even with the slider still holding focus
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    out.keyEntered = window.EH.rig.cinematic === true;
+    out.focusStillTrapped = document.activeElement === slider;
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    await new Promise((r) => setTimeout(r, 500));
+    out.escExits = window.EH.rig.cinematic === false;
+    out.ok = true;
+    return out;
+  });
+
   // --- quality governor responds to a frame-time blowup -------------------
   const gov = await page.evaluate(() => {
     const g = window.EH.sim.governor;
@@ -458,6 +601,8 @@ export async function runRenderCheck({ dev = false, verbose = true, shots = true
     ringOff,
     ringAnalysis: { on: ringPeak(ringOn), off: ringPeak(ringOff), base: ringPeak(ldr) },
     nearHorizon,
+    probeVis,
+    cineExit,
     probeFall,
     gov,
     errors,

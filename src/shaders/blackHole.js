@@ -248,15 +248,28 @@ void main() {
       transmit *= exp(-op * path * 1.6);
     }
 
-    // --- the probe: a line integral, so lensing gives it multiple images --
+    // --- the probe: analytic blob, so lensing gives it multiple images ----
+    // Marching geodesics costs ~0.6 r_s per step out here, far coarser than the
+    // probe's own size, so sampling the blob at step centres would light it only
+    // by luck. Instead each segment tests its *closest approach* to the probe and
+    // accumulates from that: identical brightness at any step budget, and every
+    // geodesic branch still produces its own lensed image.
     if (uShowProbe > 0.5 && uProbeAlpha > 0.001) {
-      vec3 d = mix(x, xn, 0.5) - probe;
-      float along = dot(d, probeRad);            // radial (spaghettification)
-      vec3 side = d - probeRad * along;
+      vec3 seg = xn - x;
+      vec3 rel = x - probe;                       // segment start relative to it
+      vec2 st = vec2(dot(-rel, seg), dot(seg, seg));
+      float t = clamp(st.x / max(st.y, 1e-8), 0.0, 1.0);
+      vec3 near = rel + seg * t;                // probe -> closest point on segment
+      float along = dot(near, probeRad);        // radial: spaghettification axis
+      vec3 side = near - probeRad * along;
       float sz = max(uProbeSize, 1e-3);
       float q = (along * along) / (sz * sz * uProbeStretch * uProbeStretch)
               + dot(side, side) / (sz * sz);
-      acc += transmit * uProbeColor * exp(-q) * dt * uProbeAlpha;
+      // count it once: only the segment that actually brackets the closest point
+      float inSpan = step(1e-4, t) * step(t, 1.0 - 1e-4);
+      float halo = exp(-q);                     // shows the tidal stretch
+      float core = exp(-q * 8.0);               // makes it read as an object
+      acc += transmit * uProbeColor * (halo * 0.3 + core * 1.0) * inSpan * uProbeAlpha;
     }
 
     x = xn;

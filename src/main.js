@@ -76,7 +76,7 @@ function doAction(action, value) {
   switch (action) {
     case 'probe': {
       const b = rig.basis();
-      probe.drop({ camPos: rig.camera.position, camUp: b.up, rObs: rig.radius });
+      probe.drop({ camPos: rig.camera.position, camUp: b.up, camRight: b.right, rObs: rig.radius });
       ui.toast(`probe released at ${probe.r0.toFixed(2)} r_s`);
       break;
     }
@@ -134,9 +134,17 @@ attachCameraInput(rig, canvas);
 
 const keys = new Set();
 window.addEventListener('keydown', (e) => {
-  const tag = (e.target && e.target.tagName) || '';
-  if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+  const t = e.target;
+  const tag = (t && t.tagName) || '';
+  const itype = ((t && t.type) || '').toLowerCase();
+  // typing in a field must not drive the ship — but a slider or checkbox that
+  // still holds focus must never swallow the shortcuts either, otherwise
+  // cinematic mode feels impossible to leave
+  if (tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (tag === 'INPUT' && itype !== 'range' && itype !== 'checkbox' && itype !== 'radio') return;
   const k = e.key.toLowerCase();
+  // let arrows tune a focused slider instead of orbiting the camera
+  if (tag === 'INPUT' && itype === 'range' && k.startsWith('arrow')) return;
   if ([' ', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) e.preventDefault();
   if (e.repeat) return;
   keys.add(k);
@@ -146,6 +154,10 @@ window.addEventListener('keydown', (e) => {
   else if (k === 'h') ui.toast(ui.toggleHud() ? 'hud hidden' : 'hud visible');
   else if (k === 'r') doAction('reset');
   else if (k === ' ') doAction('hold');
+  else if (k === 'escape' && cinematic) {
+    setCinematic(false);
+    ui.toast('cinematic off');
+  }
 });
 window.addEventListener('keyup', (e) => keys.delete(e.key.toLowerCase()));
 window.addEventListener('blur', () => keys.clear());

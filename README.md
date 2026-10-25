@@ -10,11 +10,11 @@ HDRIs, no network requests. One quad, one fragment shader, plus a small post cha
 > (quantized, served locally through Unsloth Studio) running at **high reasoning effort** inside the
 > `pi` coding agent. No cloud API, no human-written code.
 >
-> **Time to build: ≈ 1 h 18 m of wall-clock agent time** (~54 min from the brief to a tested, built,
-> browser-verified simulator; the remaining ~24 min went into numerical validation, two extra test
-> suites and docs). Roughly a third of that is machine time — booting headless WebGL2 contexts and
-> reading back 1440×900 float framebuffers for the render assertions. See [`PROMPT.md`](./PROMPT.md)
-> for the original brief, run metadata and the time breakdown.
+> **Time to build: ≈ 54 min** from the brief to a tested, built, browser-verified simulator, and
+> **≈ 1 h 47 m** of agent time end-to-end including publishing plus two fixes found by actually using it.
+> Roughly a third is machine time — booting headless WebGL2 contexts and reading back 1440×900 float
+> framebuffers for the render assertions. See [`PROMPT.md`](./PROMPT.md) for the original brief, run
+> metadata, the phase breakdown and what the bug reports turned out to be.
 
 **▶ Live demo: <https://whobutsb.github.io/event-horizon/>** — everything runs in your browser; no
 install, no assets, no account. Pushing to `main` redeploys it (`.github/workflows/pages.yml`).
@@ -70,10 +70,14 @@ npm run check:live   # load the deployed URL in headless Chrome and assert it re
 | `W`/`S`, shift-drag, right-drag | fly in / out (crossing the horizon is allowed) |
 | `A`/`D`, arrows | orbit |
 | `P` | drop a probe |
-| `C` | cinematic (scripted, loopable camera for recording) |
+| `C` | cinematic (scripted, loopable camera for recording); `C`, `Esc` or the on-screen pill exits |
 | `H` | hide the HUD |
 | `R` | reset to the current preset |
 | `1`–`4` | Gargantua / Sagittarius A★ / Quiet / Cygnus X-1 |
+
+Cinematic mode fades the chrome out for clean recording, and leaves a single clickable
+`REC — click or press C / Esc to exit` pill on screen (the panel's own button is deliberately invisible
+at that point, which is exactly how "I can't leave cinematic mode" happens if you forget it).
 
 The right-hand panel exposes mass, spin `a★`, lensing strength, time scale, disk temperature,
 disk tilt, disk glow, photon-ring strength, starfield density, an "align star" slider (drive a
@@ -189,8 +193,12 @@ and star drift slow down in the same ratio — they are driven by `simT`, which 
 
 ### 5. The probe
 
-`P` releases a probe from rest at the ship's radius and integrates the **radial timelike geodesic** in
-coordinate time `t` with RK4 (`src/probe.js`, math in `src/physics.js`):
+`P` (or the button — which stays actionable, so you can drop as many as you like; the running probe's
+status is reported in telemetry) deploys a probe **ahead of the ship** — about half the ship's radius
+out, tilted ~6° off the ship→hole axis, mostly screen-vertical — and releases it from rest. That
+geometry is deliberate: releasing it at your own radius puts it *beside* the camera, at almost zero
+depth, so it lands outside the field of view and looks like nothing happened. It then integrates the
+**radial timelike geodesic** in coordinate time `t` with RK4 (`src/probe.js`, math in `src/physics.js`):
 
 ```
 E      = √(1 - r_s/r₀)                                  specific energy
@@ -201,10 +209,15 @@ g      = (1 - r_s/r) / ( E + √(E² - 1 + r_s/r) )        observed redshift, �
 ```
 
 Because the integration is in `t`, the **freeze is not scripted**: the probe's coordinate speed simply
-goes to zero while its own clock (`τ`) keeps marching through the horizon. Rendering integrates the
-probe as a line integral along each geodesic, so it gets lensed into multiple images; its colour is a
-blackbody at `6500 K · g` and its brightness falls like `g^1.15`, while the tidal term elongates it
-radially — spaghettification, visible as stretching before it fades to infrared and vanishes.
+goes to zero while its own clock (`τ`) keeps marching through the horizon. Its colour is a blackbody at
+`6500 K · g` and its brightness falls like `g^1.15`, while the tidal term elongates it radially —
+spaghettification, visible as stretching before it fades to infrared and vanishes.
+
+Drawing it is subtler than it looks: geodesic steps are ~0.6 r_s long out there, far coarser than the
+probe itself, so sampling an emissive ball at step centres lights it only by luck (it looked like a bug:
+"nothing appears"). Each ray segment therefore tests its **closest approach** to the probe and
+accumulates from that — brightness independent of the step budget, and every geodesic branch still
+produces its own lensed image. A short bright flare on release helps the eye find it.
 
 ### 6. Stars, galaxy band, Einstein ring
 

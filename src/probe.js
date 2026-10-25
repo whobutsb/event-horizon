@@ -47,7 +47,11 @@ export class Probe {
     this.color = new THREE.Color(1, 1, 1);
     this.stretch = 1;
     this.alpha = 0;
-    this.size = 0.05;
+    // The blob is integrated analytically (closest approach per segment), so it
+    // always draws no matter how coarse the march is -> this can stay small and
+    // read as an object: ~15 px at release, ~7 px once it is down by the shadow.
+    this.size = 0.06;
+    this.flash = 0; // release flare, decays over ~0.6 s of sim time
     this.g = 1;
     this.dilation = 1;
     this.frozen = false;
@@ -56,20 +60,28 @@ export class Probe {
   }
 
   /**
-   * Release the probe near the ship.
-   * @param {{camPos:THREE.Vector3, camUp:THREE.Vector3, rObs:number}} ctx
+   * Deploy the probe just ahead of the ship and release it from rest.
+   *
+   * Geometry matters for legibility. Releasing it at the ship's own radius puts
+   * it beside the camera (nearly zero depth, so a huge screen angle) and outside
+   * the field of view. So we release it from about half the ship's radius — i.e.
+   * clearly between you and the hole — tilted ~6 deg off the ship->hole axis,
+   * mostly screen-vertical. It then appears next to the shadow and drifts in
+   * towards it: a fixed angular offset subtends a smaller screen angle as r
+   * shrinks, so the fall reads as a descent into the black disc.
    */
-  drop({ camPos, camUp = new THREE.Vector3(0, 1, 0), rObs }) {
-    const r0 = clamp(camPos.length(), 2.4, 34);
-    // start slightly off the camera-hole axis so the fall stays visible next to
-    // the shadow instead of disappearing straight behind it
-    const base = camPos.clone().normalize();
-    const side = new THREE.Vector3()
-      .crossVectors(base, camUp)
+  drop({ camPos, camUp = new THREE.Vector3(0, 1, 0), camRight = null, rObs }) {
+    const R = clamp(camPos.length(), 2.4, 34);
+    const r0 = Math.max(3.2, Math.min(R * 0.55, R - 1.2));
+    const base = camPos.clone().normalize(); // hole -> ship
+    const up = camUp.clone().normalize();
+    const right = (camRight ? camRight.clone() : new THREE.Vector3(1, 0, 0)).normalize();
+    const off = up
+      .multiplyScalar(0.92)
+      .add(right.multiplyScalar(0.3))
       .normalize()
-      .addScaledVector(camUp, 0.55);
-    if (!Number.isFinite(side.lengthSq()) || side.lengthSq() < 1e-6) side.set(0, 0.4, 0);
-    this.dir = base.add(side.multiplyScalar(0.22)).normalize();
+      .multiplyScalar(Math.tan((6 * Math.PI) / 180));
+    this.dir = base.add(off).normalize();
     this.r0 = r0;
     // released from rest at r0 (with an imperceptible inward nudge: exactly at
     // rest is an unstable fixed point of the energy equation)
@@ -79,6 +91,7 @@ export class Probe {
     this.frozen = false;
     this.crossedDisk = 0;
     this.alpha = 1;
+    this.flash = 1; // brief bright flare so the eye can find it
     this.stretch = 1;
     this.sync(rObs);
     return this;
@@ -88,6 +101,7 @@ export class Probe {
   update(dtSim, rObs) {
     if (!this.active) return this;
     const dt = clamp(dtSim, 0, 0.25);
+    this.flash = Math.max(0, this.flash - dt * 1.7);
     const h = dt / this._sub;
     for (let i = 0; i < this._sub; i++) {
       if (this.state.r <= 1.0008) break;
@@ -111,13 +125,14 @@ export class Probe {
     const observedTemp = 6500 * Math.max(this.g, 1e-4);
     this.color.copy(kelvinToRgb(observedTemp));
     const boost = Math.pow(clamp(this.g, 0, 2), 1.15);
-    this.alpha = clamp(0.12 + 1.05 * boost, 0, 1.15);
+    // floor keeps it findable against the disk; the flare only lasts a moment
+    this.alpha = clamp((0.3 + 1.15 * boost) * (1 + 2.4 * this.flash), 0, 2.2);
 
     // tidal stretch: radial elongation grows without bound near the horizon
     const proximity = clamp(1 - (this.state.r - 1) / (this.r0 - 1 + 1e-6), 0, 1);
     this.stretch = clamp(1 + 26 * Math.pow(proximity, 5.5) + 0.35 * (this.r0 / this.state.r - 1), 1, 44);
-    // small enough to read as an object; the tidal term does the growing
-    this.size = 0.05;
+    // constant physical size (~10 px at a typical viewing distance); the tidal
+    // stretch term is what makes it long, not this number
     return this;
   }
 
