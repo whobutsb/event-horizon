@@ -72,7 +72,13 @@ else
   git init -q -b gh-pages "$TMP"
   git -C "$TMP" remote add origin "https://github.com/${OWNER}/${REPO}.git"
 fi
-rsync -a --delete --exclude '.git' "$PWD/dist/" "$TMP/"
+# Wipe everything but .git and copy fresh. Do NOT rely on rsync's size+mtime
+# quick-check here: two builds of this app produce an index.html of identical
+# size, and a freshly cloned worktree has the same mtime as the build output, so
+# rsync happily "skips" it and Pages ends up serving HTML that points at the
+# previous build's hashed assets — a blank page with 404s.
+find "$TMP" -mindepth 1 -maxdepth 1 -not -name '.git' -exec rm -rf {} +
+cp -R "$PWD/dist/." "$TMP/"
 : > "$TMP/.nojekyll"                       # skip Jekyll processing on Pages
 git -C "$TMP" add -A
 git -C "$TMP" -c "user.name=${GIT_NAME}" -c "user.email=${GIT_MAIL}" \
@@ -104,9 +110,21 @@ gh repo edit "${OWNER}/${REPO}" --homepage "${URL}" >/dev/null 2>&1 || true
 # ---------------------------------------------------------------- verify ----
 echo "waiting for ${URL} ..."
 for _ in $(seq 1 60); do
-  if curl -sfL "${URL}" | grep -qi "Event Horizon"; then
+  HTML=$(curl -sfL "${URL}?cb=${RANDOM}$RANDOM" || true)
+  # the served HTML must reference assets that actually exist: a stale index.html
+  # over fresh assets looks like a black screen with 404s, not like a failed deploy
+  refs=$(printf '%s' "$HTML" | grep -oE 'assets/[A-Za-z0-9._-]+' | sort -u)
+  ok=1
+  [ -n "$refs" ] || ok=0
+  printf '%s' "$HTML" | grep -qi "Event Horizon" || ok=0
+  for a in $refs; do
+    code=$(curl -s -o /dev/null -w '%{http_code}' "${URL}${a}")
+    [ "$code" = "200" ] || { echo "  ${a} -> ${code}, waiting..."; ok=0; }
+  done
+  if [ "$ok" = 1 ]; then
     echo
     echo "✅ live: ${URL}"
+    printf '   assets served: %s\n' "$(printf '%s' "$refs" | tr '\n' ' ')"
     echo "   repo:  https://github.com/${OWNER}/${REPO}"
     exit 0
   fi

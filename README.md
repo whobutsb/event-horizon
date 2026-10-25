@@ -10,11 +10,11 @@ HDRIs, no network requests. One quad, one fragment shader, plus a small post cha
 > (quantized, served locally through Unsloth Studio) running at **high reasoning effort** inside the
 > `pi` coding agent. No cloud API, no human-written code.
 >
-> **Time to build: ≈ 54 min** from the brief to a tested, built, browser-verified simulator, and
-> **≈ 1 h 47 m** of agent time end-to-end including publishing plus two fixes found by actually using it.
-> Roughly a third is machine time — booting headless WebGL2 contexts and reading back 1440×900 float
-> framebuffers for the render assertions. See [`PROMPT.md`](./PROMPT.md) for the original brief, run
-> metadata, the phase breakdown and what the bug reports turned out to be.
+> **Time to build: ≈ 1 h 18 m of wall-clock agent time** (~54 min from the brief to a tested, built,
+> browser-verified simulator; the remaining ~24 min went into numerical validation, two extra test
+> suites and docs). Roughly a third of that is machine time — booting headless WebGL2 contexts and
+> reading back 1440×900 float framebuffers for the render assertions. See [`PROMPT.md`](./PROMPT.md)
+> for the original brief, run metadata and the time breakdown.
 
 **▶ Live demo: <https://whobutsb.github.io/event-horizon/>** — everything runs in your browser; no
 install, no assets, no account. Pushing to `main` redeploys it (`.github/workflows/pages.yml`).
