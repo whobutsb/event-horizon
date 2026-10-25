@@ -81,7 +81,8 @@ git -C "$TMP" push -q -f origin gh-pages
 rm -rf "$TMP"
 
 # --------------------------------------------------------------- pages ------
-PAGES=$(gh api "repos/${OWNER}/${REPO}/pages" --jq '.build_type + ":" + (.source.branch // "-")' 2>/dev/null || echo "")
+# a 404 comes back as a JSON body, so match on the shape we actually expect
+PAGES=$(gh api "repos/${OWNER}/${REPO}/pages" --jq 'select(.build_type) | .build_type + ":" + (.source.branch // "-")' 2>/dev/null || echo "")
 if [ -z "$PAGES" ]; then
   echo "enabling Pages from the gh-pages branch..."
   gh api -X POST "repos/${OWNER}/${REPO}/pages" --input - >/dev/null <<JSON
@@ -89,9 +90,12 @@ if [ -z "$PAGES" ]; then
 JSON
 elif [ "$PAGES" != "legacy:gh-pages" ]; then
   echo "pointing Pages at gh-pages (was ${PAGES})..."
-  gh api -X PUT "repos/${OWNER}/${REPO}/pages" --input - >/dev/null <<JSON
+  gh api -X PUT "repos/${OWNER}/${REPO}/pages" --input - >/dev/null <<JSON || \
+  gh api -X POST "repos/${OWNER}/${REPO}/pages" --input - >/dev/null <<JSON2
 { "source": { "branch": "gh-pages", "path": "/" } }
 JSON
+{ "source": { "branch": "gh-pages", "path": "/" } }
+JSON2
 else
   echo "Pages already builds gh-pages"
 fi
