@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='30' fill='%23000'/%3E%3Ccircle cx='32' cy='32' r='21' fill='none' stroke='%237fdcff' stroke-width='3'/%3E%3Ccircle cx='32' cy='32' r='12' fill='%23000'/%3E%3C/svg%3E" />
+    <title>Event Horizon — black hole simulator</title>
+    <meta
+      name="description"
+      content="Real-time Schwarzschild black hole with gravitational lensing, relativistic Doppler beaming and a procedural starfield. Everything on screen is generated in the shader."
+    />
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+    <div id="boot">
+      <div class="boot-inner">
+        <div class="boot-title">EVENT HORIZON</div>
+        <div class="boot-bar"><i></i></div>
+        <div class="boot-msg" id="boot-msg">warming up the geodesic integrator…</div>
+      </div>
+    </div>
+    <noscript
+      ><p style="font: 12px ui-monospace, monospace; color: #fff; padding: 2rem">
+        Event Horizon needs JavaScript and WebGL.
+      </p></noscript
+    >
+    <script type="module" src="/src/main.js"></script>
+    <script>
+      // If the module never boots (no WebGL, bad GPU driver), say so plainly.
+      setTimeout(function () {
+        var b = document.getElementById('boot');
+        if (b && !b.classList.contains('gone')) {
+          document.getElementById('boot-msg').textContent =
+            'still waiting — this app needs a WebGL2 capable browser with hardware acceleration';
+        }
+      }, 6000);
+    </script>
+  </body>
+</html>

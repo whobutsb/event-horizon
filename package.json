@@ -1,0 +1,28 @@
+{
+  "name": "event-horizon",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Event Horizon \u2014 an interactive real-time black hole simulator (Three.js + Vite, 100% procedural)",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/physics.test.js tests/presets.test.js tests/quality.test.js",
+    "test:render": "vitest run tests/render.browser.test.js",
+    "test:watch": "vitest",
+    "render:check": "node scripts/render-check.mjs",
+    "verify": "npm run test:unit && npm run build && npm run test:render",
+    "probe:webgl": "node scripts/webgl-probe.mjs",
+    "deploy": "bash scripts/deploy-gh.sh"
+  },
+  "dependencies": {
+    "three": "^0.186.1"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^25.16.0",
+    "vite": "^8.3.5",
+    "vitest": "^5.0.5"
+  }
+}
